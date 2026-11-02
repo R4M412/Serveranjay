@@ -1,0 +1,19 @@
+# MODE TUNNEL — Cloudflare Tunnel. TIDAK ADA port yang dibuka di server/router sama sekali.
+# Server yang "menelepon keluar" ke Cloudflare; akses dikunci Cloudflare Access (hanya email kamu).
+# Butuh: domain yang DNS-nya di Cloudflare + token tunnel dari dashboard Zero Trust (lihat README).
+services:
+  cloudflared:
+    image: cloudflare/cloudflared:latest
+    restart: unless-stopped
+    logging:
+      driver: json-file
+      options: { max-size: "10m", max-file: "3" }
+    command: tunnel --no-autoupdate run
+    environment:
+      TUNNEL_TOKEN: ${CF_TUNNEL_TOKEN}
+    networks: [web]
+
+  nextcloud:
+    environment:
+      OVERWRITEPROTOCOL: https
+      TRUSTED_PROXIES: 172.16.0.0/12 10.0.0.0/8 192.168.0.0/16

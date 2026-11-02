@@ -1,0 +1,22 @@
+# MODE LOCAL — tanpa domain. Layanan dibuka lewat IP:PORT (cocok untuk PC rumah / jaringan LAN).
+# BIND_IP=0.0.0.0  -> bisa diakses perangkat lain di jaringan
+# BIND_IP=127.0.0.1 -> hanya dari mesin itu sendiri
+services:
+  dashboard:
+    ports: ["${BIND_IP:-0.0.0.0}:8000:8000"]
+  portainer:
+    ports: ["${BIND_IP:-0.0.0.0}:9443:9443"]
+  code:
+    ports: ["${BIND_IP:-0.0.0.0}:8080:8080"]
+  jupyter:
+    ports: ["${BIND_IP:-0.0.0.0}:8888:8888"]
+  nextcloud:
+    ports: ["${BIND_IP:-0.0.0.0}:8081:80"]
+  adminer:
+    ports: ["${BIND_IP:-0.0.0.0}:8082:8080"]
+  uptime-kuma:
+    ports: ["${BIND_IP:-0.0.0.0}:3001:3001"]
+  netdata:
+    ports: ["${BIND_IP:-0.0.0.0}:19999:19999"]
+  postgres:
+    ports: ["127.0.0.1:5432:5432"]   # database tidak pernah dibuka ke jaringan

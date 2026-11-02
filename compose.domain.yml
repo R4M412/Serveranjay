@@ -1,0 +1,41 @@
+# MODE DOMAIN — untuk VPS dengan domain. Semua layanan lewat HTTPS otomatis (Let's Encrypt)
+# Butuh DNS:  A  namadomain.com   -> IP server
+#             A  *.namadomain.com -> IP server
+services:
+  traefik:
+    image: traefik:v3
+    restart: unless-stopped
+    logging:
+      driver: json-file
+      options: { max-size: "10m", max-file: "3" }
+    command:
+      - --providers.docker=true
+      - --providers.docker.endpoint=tcp://socket-proxy:2375
+      - --providers.docker.exposedbydefault=false
+      - --providers.docker.network=${PROJECT_NAME:-serverku}_web
+      - --entrypoints.web.address=:80
+      - --entrypoints.web.http.redirections.entrypoint.to=websecure
+      - --entrypoints.web.http.redirections.entrypoint.scheme=https
+      - --entrypoints.websecure.address=:443
+      - --entrypoints.websecure.http.tls.certresolver=le
+      - --certificatesresolvers.le.acme.email=${ACME_EMAIL}
+      - --certificatesresolvers.le.acme.storage=/letsencrypt/acme.json
+      - --certificatesresolvers.le.acme.httpchallenge=true
+      - --certificatesresolvers.le.acme.httpchallenge.entrypoint=web
+      - --log.level=INFO
+      - --accesslog=true
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - letsencrypt:/letsencrypt
+    depends_on: [socket-proxy]
+    networks: [web, internal]
+
+  nextcloud:
+    environment:
+      OVERWRITEPROTOCOL: https
+      TRUSTED_PROXIES: 172.16.0.0/12 10.0.0.0/8 192.168.0.0/16
+
+volumes:
+  letsencrypt: {}

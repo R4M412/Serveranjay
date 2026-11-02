@@ -1,0 +1,249 @@
+# =====================================================================
+#  SERVER PRIBADI — stack utama
+#  Jangan jalankan file ini langsung; pakai ./install.sh lalu ./server.sh
+#  Mode (local / domain) dipilih lewat COMPOSE_FILE di file .env
+# =====================================================================
+name: ${PROJECT_NAME:-serverku}
+
+x-common: &common
+  restart: unless-stopped
+  logging:
+    driver: json-file
+    options:
+      max-size: "10m"
+      max-file: "3"
+
+services:
+  # --- Gerbang aman ke Docker API (tidak ada yang menyentuh docker.sock mentah selain Portainer)
+  socket-proxy:
+    <<: *common
+    image: tecnativa/docker-socket-proxy:latest
+    environment:
+      CONTAINERS: 1
+      NETWORKS: 1
+      INFO: 1
+      VERSION: 1
+      EVENTS: 1
+      POST: 0            # semua aksi tulis diblokir...
+      ALLOW_START: 1     # ...kecuali start / stop / restart container
+      ALLOW_STOP: 1
+      ALLOW_RESTARTS: 1
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    networks: [internal]
+
+  # --- Pusat Kendali (dashboard buatan sendiri)
+  dashboard:
+    <<: *common
+    build: ./dashboard
+    image: ${PROJECT_NAME:-serverku}/dashboard:local
+    environment:
+      ADMIN_USER: ${ADMIN_USER}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD}
+      DOCKER_HOST: tcp://socket-proxy:2375
+      COMPOSE_PROJECT: ${PROJECT_NAME:-serverku}
+      MODE: ${MODE}
+      DOMAIN: ${DOMAIN}
+      HOST_ADDR: ${HOST_ADDR}
+      HOST_PROC: /host/proc
+      TZ: ${TZ:-Asia/Jakarta}
+    volumes:
+      - /proc:/host/proc:ro
+    depends_on: [socket-proxy]
+    networks: [web, internal]
+    labels:
+      traefik.enable: "true"
+      traefik.http.routers.panel.rule: Host(`${DOMAIN}`) || Host(`panel.${DOMAIN}`)
+      traefik.http.routers.panel.entrypoints: websecure
+      traefik.http.services.panel.loadbalancer.server.port: "8000"
+
+  # --- Portainer: kelola container, image, volume, network
+  portainer:
+    <<: *common
+    image: portainer/portainer-ce:lts
+    command: --admin-password-file /run/secrets/portainer_admin_password
+    secrets: [portainer_admin_password]
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - portainer:/data
+    networks: [web]
+    labels:
+      traefik.enable: "true"
+      traefik.http.routers.portainer.rule: Host(`portainer.${DOMAIN}`)
+      traefik.http.routers.portainer.entrypoints: websecure
+      traefik.http.services.portainer.loadbalancer.server.port: "9000"
+
+  # --- VS Code di browser
+  code:
+    <<: *common
+    image: codercom/code-server:latest
+    environment:
+      PASSWORD: ${CODE_PASSWORD}
+      TZ: ${TZ:-Asia/Jakarta}
+    volumes:
+      - code:/home/coder
+    networks: [web, db]
+    labels:
+      traefik.enable: "true"
+      traefik.http.routers.code.rule: Host(`code.${DOMAIN}`)
+      traefik.http.routers.code.entrypoints: websecure
+      traefik.http.services.code.loadbalancer.server.port: "8080"
+
+  # --- JupyterLab (profil "full")
+  jupyter:
+    <<: *common
+    image: quay.io/jupyter/scipy-notebook:latest
+    profiles: [full]
+    environment:
+      JUPYTER_TOKEN: ${JUPYTER_TOKEN}
+      TZ: ${TZ:-Asia/Jakarta}
+    volumes:
+      - jupyter:/home/jovyan/work
+    networks: [web, db]
+    labels:
+      traefik.enable: "true"
+      traefik.http.routers.jupyter.rule: Host(`jupyter.${DOMAIN}`)
+      traefik.http.routers.jupyter.entrypoints: websecure
+      traefik.http.services.jupyter.loadbalancer.server.port: "8888"
+
+  # --- Database utama
+  postgres:
+    <<: *common
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: ${DB_USER}
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+      POSTGRES_DB: app
+      NEXTCLOUD_DB_PASSWORD: ${NEXTCLOUD_DB_PASSWORD}
+      TZ: ${TZ:-Asia/Jakarta}
+    volumes:
+      - pg:/var/lib/postgresql/data
+      - ./postgres/init:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d app"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    networks: [db]
+
+  # --- Web UI database
+  adminer:
+    <<: *common
+    image: adminer:latest
+    environment:
+      ADMINER_DEFAULT_SERVER: postgres
+    depends_on: [postgres]
+    networks: [web, db]
+    labels:
+      traefik.enable: "true"
+      traefik.http.routers.adminer.rule: Host(`db.${DOMAIN}`)
+      traefik.http.routers.adminer.entrypoints: websecure
+      traefik.http.services.adminer.loadbalancer.server.port: "8080"
+
+  # --- Cache untuk Nextcloud (profil "full")
+  redis:
+    <<: *common
+    image: redis:7-alpine
+    profiles: [full]
+    command: ["redis-server", "--requirepass", "${REDIS_PASSWORD}", "--save", "60", "1"]
+    volumes:
+      - redis:/data
+    networks: [db]
+
+  # --- Cloud storage pribadi (profil "full")
+  nextcloud:
+    <<: *common
+    image: nextcloud:stable
+    profiles: [full]
+    environment:
+      POSTGRES_HOST: postgres
+      POSTGRES_DB: nextcloud
+      POSTGRES_USER: nextcloud
+      POSTGRES_PASSWORD: ${NEXTCLOUD_DB_PASSWORD}
+      NEXTCLOUD_ADMIN_USER: ${ADMIN_USER}
+      NEXTCLOUD_ADMIN_PASSWORD: ${NEXTCLOUD_ADMIN_PASSWORD}
+      NEXTCLOUD_TRUSTED_DOMAINS: ${HOST_ADDR} localhost cloud.${DOMAIN}
+      REDIS_HOST: redis
+      REDIS_HOST_PASSWORD: ${REDIS_PASSWORD}
+      PHP_UPLOAD_LIMIT: 4G
+      TZ: ${TZ:-Asia/Jakarta}
+    volumes:
+      - nextcloud:/var/www/html
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_started
+    networks: [web, db]
+    labels:
+      traefik.enable: "true"
+      traefik.http.routers.cloud.rule: Host(`cloud.${DOMAIN}`)
+      traefik.http.routers.cloud.entrypoints: websecure
+      traefik.http.services.cloud.loadbalancer.server.port: "80"
+
+  # --- Pemantau uptime + notifikasi (Telegram, Discord, email, dll.)
+  uptime-kuma:
+    <<: *common
+    image: louislam/uptime-kuma:1
+    volumes:
+      - uptime:/app/data
+    networks: [web]
+    labels:
+      traefik.enable: "true"
+      traefik.http.routers.status.rule: Host(`status.${DOMAIN}`)
+      traefik.http.routers.status.entrypoints: websecure
+      traefik.http.services.status.loadbalancer.server.port: "3001"
+
+  # --- Monitoring detail real-time
+  netdata:
+    <<: *common
+    image: netdata/netdata:stable
+    hostname: ${PROJECT_NAME:-serverku}
+    pid: host
+    cap_add: [SYS_PTRACE, SYS_ADMIN]
+    security_opt: [apparmor:unconfined]
+    environment:
+      DOCKER_HOST: socket-proxy:2375
+      TZ: ${TZ:-Asia/Jakarta}
+    volumes:
+      - netdataconfig:/etc/netdata
+      - netdatalib:/var/lib/netdata
+      - netdatacache:/var/cache/netdata
+      - /etc/passwd:/host/etc/passwd:ro
+      - /etc/group:/host/etc/group:ro
+      - /etc/os-release:/host/etc/os-release:ro
+      - /proc:/host/proc:ro
+      - /sys:/host/sys:ro
+    networks: [web, internal]
+    labels:
+      traefik.enable: "true"
+      traefik.http.routers.monitor.rule: Host(`monitor.${DOMAIN}`)
+      traefik.http.routers.monitor.entrypoints: websecure
+      traefik.http.routers.monitor.middlewares: monitor-auth
+      traefik.http.middlewares.monitor-auth.basicauth.users: ${NETDATA_BASIC_AUTH}
+      traefik.http.services.monitor.loadbalancer.server.port: "19999"
+
+secrets:
+  portainer_admin_password:
+    file: ./secrets/portainer_admin_password
+
+networks:
+  web:
+    name: ${PROJECT_NAME:-serverku}_web
+  db:
+    name: ${PROJECT_NAME:-serverku}_db
+  internal:
+    name: ${PROJECT_NAME:-serverku}_internal
+    internal: true
+
+volumes:
+  portainer: {}
+  code: {}
+  jupyter: {}
+  pg: {}
+  redis: {}
+  nextcloud: {}
+  uptime: {}
+  netdataconfig: {}
+  netdatalib: {}
+  netdatacache: {}

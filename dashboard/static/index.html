@@ -1,0 +1,126 @@
+<!doctype html>
+<html lang="id">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Pusat Kendali</title>
+  <link rel="stylesheet" href="/static/style.css">
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%2311161d'/%3E%3Cpath d='M8 11h16M8 16h16M8 21h16' stroke='%233ddc97' stroke-width='2.5' stroke-linecap='round'/%3E%3C/svg%3E">
+</head>
+<body>
+  <!-- ===================== LOGIN ===================== -->
+  <main id="login" class="login hidden">
+    <form id="login-form" class="login-card" autocomplete="on">
+      <div class="brand big">
+        <span class="brand-mark"><i></i><i></i><i></i></span>
+        <div>
+          <h1>Pusat Kendali</h1>
+          <p>Server pribadimu, satu pintu.</p>
+        </div>
+      </div>
+      <label>Username
+        <input id="lg-user" name="username" autocomplete="username" required>
+      </label>
+      <label>Password
+        <input id="lg-pass" name="password" type="password" autocomplete="current-password" required>
+      </label>
+      <p id="lg-err" class="err" role="alert"></p>
+      <button class="btn primary wide" type="submit">Masuk</button>
+      <p class="hint">Lupa password? Di server jalankan <code>sudo ./server.sh info</code></p>
+    </form>
+  </main>
+
+  <!-- ===================== APP ===================== -->
+  <div id="app" class="hidden">
+    <header class="topbar">
+      <div class="brand">
+        <span class="brand-mark"><i></i><i></i><i></i></span>
+        <div>
+          <strong>Pusat Kendali</strong>
+          <small id="tb-project">—</small>
+        </div>
+      </div>
+      <div class="topbar-right">
+        <span id="tb-conn" class="conn"><b></b><span>menghubungkan…</span></span>
+        <span id="tb-mode" class="chip">—</span>
+        <button id="btn-logout" class="btn ghost sm">Keluar</button>
+      </div>
+    </header>
+
+    <main class="wrap">
+      <div id="banner" class="banner hidden"></div>
+
+      <section class="meters" aria-label="Kondisi server">
+        <article class="meter" id="m-cpu">
+          <header><span>CPU</span><small class="sub">—</small></header>
+          <div class="val">—</div>
+          <div class="bar"><i></i></div>
+          <canvas class="spark" width="300" height="44"></canvas>
+        </article>
+        <article class="meter" id="m-mem">
+          <header><span>Memori</span><small class="sub">—</small></header>
+          <div class="val">—</div>
+          <div class="bar"><i></i></div>
+          <canvas class="spark" width="300" height="44"></canvas>
+        </article>
+        <article class="meter" id="m-disk">
+          <header><span>Disk</span><small class="sub">—</small></header>
+          <div class="val">—</div>
+          <div class="bar"><i></i></div>
+          <div class="foot sub2">—</div>
+        </article>
+        <article class="meter" id="m-up">
+          <header><span>Uptime</span><small class="sub">load 1·5·15 m</small></header>
+          <div class="val">—</div>
+          <div class="load"><span>—</span><span>—</span><span>—</span></div>
+          <div class="foot sub2" id="m-count">—</div>
+        </article>
+      </section>
+
+      <section class="services">
+        <div class="section-head">
+          <h2>Layanan</h2>
+          <div class="filters" role="tablist">
+            <button class="chip on" data-f="all">Semua</button>
+            <button class="chip" data-f="running">Berjalan</button>
+            <button class="chip" data-f="stopped">Berhenti</button>
+          </div>
+        </div>
+        <div id="grid" class="grid"></div>
+        <p id="empty" class="empty hidden">Belum ada container dari stack ini. Jalankan <code>sudo ./server.sh start</code> di server.</p>
+      </section>
+
+      <section class="tips">
+        <h2>Perintah penting</h2>
+        <div class="tip-grid">
+          <div><code>sudo ./server.sh info</code><span>Semua alamat &amp; password</span></div>
+          <div><code>sudo ./server.sh backup</code><span>Cadangkan database + semua data</span></div>
+          <div><code>sudo ./server.sh update</code><span>Tarik versi terbaru semua layanan</span></div>
+          <div><code>sudo ./server.sh logs code</code><span>Ikuti log satu layanan</span></div>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <!-- ===================== LOG MODAL ===================== -->
+  <dialog id="logdlg" class="logdlg">
+    <header>
+      <div><strong id="log-title">Log</strong><small id="log-sub"></small></div>
+      <div class="row">
+        <select id="log-tail" aria-label="Jumlah baris">
+          <option value="100">100 baris</option>
+          <option value="300" selected>300 baris</option>
+          <option value="1000">1000 baris</option>
+        </select>
+        <label class="chk"><input type="checkbox" id="log-follow" checked> ikuti</label>
+        <button class="btn ghost sm" id="log-refresh">Muat ulang</button>
+        <button class="btn ghost sm" id="log-close">Tutup</button>
+      </div>
+    </header>
+    <pre id="log-body">memuat…</pre>
+  </dialog>
+
+  <div id="toasts" class="toasts" aria-live="polite"></div>
+  <script src="/static/app.js"></script>
+</body>
+</html>
