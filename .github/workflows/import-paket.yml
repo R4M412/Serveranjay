@@ -1,0 +1,26 @@
+name: Impor paket server (sekali jalan)
+on:
+  push:
+    paths: ['.github/workflows/import-paket.yml']
+  workflow_dispatch:
+permissions:
+  contents: write
+jobs:
+  impor:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Unduh & cek paket
+        run: |
+          curl -fsSL -o /tmp/p.zip 'https://sg.migoo.ai/beeai/api/v1/media/signed/budee/2026/11/03/a2aa0ae3.zip?expires=1793658047&sig=80cadd69ce1e07ecf8a92f6cb2d214c5b76009b3f3ed8ad8312f00257e825fe5'
+          echo '631e167fb788871383e3fd0a98aa32c548e27a27445a7580cba794b558e0e4e0  /tmp/p.zip' | sha256sum -c -
+          unzip -q /tmp/p.zip -d /tmp/p
+      - name: Salin file & commit
+        run: |
+          rsync -a --exclude '.git' /tmp/p/Serveranjay/ ./
+          git config user.name 'R4M412'
+          git config user.email '169633062+R4M412@users.noreply.github.com'
+          git add -A
+          git status --short
+          git commit -m 'Server pribadi: Pusat Kendali + 10 layanan (mode local/domain/tunnel)'
+          git push
